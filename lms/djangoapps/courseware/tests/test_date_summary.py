@@ -18,6 +18,7 @@ from course_modes.tests.factories import CourseModeFactory
 from lms.djangoapps.courseware.courses import get_course_date_blocks
 from lms.djangoapps.courseware.date_summary import (
     CertificateAvailableDate,
+    CourseAssignmentDate,
     CourseEndDate,
     CourseStartDate,
     TodaysDate,
@@ -41,7 +42,7 @@ from openedx.core.djangoapps.waffle_utils.testutils import override_waffle_flag
 from openedx.features.course_experience import UNIFIED_COURSE_TAB_FLAG, UPGRADE_DEADLINE_MESSAGE, CourseHomeMessages
 from student.tests.factories import TEST_PASSWORD, CourseEnrollmentFactory, UserFactory
 from xmodule.modulestore.tests.django_utils import SharedModuleStoreTestCase
-from xmodule.modulestore.tests.factories import CourseFactory
+from xmodule.modulestore.tests.factories import CourseFactory, ItemFactory
 
 
 @ddt.ddt
@@ -128,6 +129,27 @@ class CourseDateSummaryTest(SharedModuleStoreTestCase):
         user = create_user(**user_kwargs)
         CourseEnrollmentFactory(course_id=course.id, user=user, mode=CourseMode.VERIFIED)
         self.assert_block_types(course, user, expected_blocks)
+
+    def test_enabled_block_types_with_assignments(self):
+        course = create_course_run(days_till_start=-1)
+        user = create_user()
+        CourseEnrollmentFactory(course_id=course.id, user=user, mode=CourseMode.VERIFIED)
+        with self.store.bulk_operations(course.id):
+            chapter = ItemFactory.create(category='chapter', parent_location=course.location)
+            section = ItemFactory.create(
+                category='sequential',
+                parent_location=chapter.location,
+                due=datetime.now(utc) + timedelta(days=7),
+                graded=True,
+            )
+
+        with patch('lms.djangoapps.courseware.courses.get_dates_for_course') as mock_get_dates:
+            mock_get_dates.return_value = {
+                (section.location, 'due'): section.due,
+                (section.location, 'start'): section.start,
+            }
+            expected_blocks = (TodaysDate, CourseAssignmentDate, CourseEndDate, VerificationDeadlineDate)
+            self.assert_block_types(course, user, expected_blocks)
 
     @ddt.data(
         # Course not started

@@ -418,9 +418,7 @@ def date_block_key_fn(block):
     If the block's date is None, return the maximum datetime in order
     to force it to the end of the list of displayed blocks.
     """
-    if block.date is None:
-        return datetime.max.replace(tzinfo=pytz.UTC)
-    return block.date
+    return block.date or datetime.max.replace(tzinfo=pytz.UTC)
 
 
 def get_course_assignment_due_dates(course, user, request, num_return=None):
